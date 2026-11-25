@@ -30,6 +30,11 @@
         "isSuspended": { "type": "boolean" },
         "biometricsEnabled": { "type": "boolean" },
         "currency": { "type": "string", "enum": ["USD", "EUR", "GBP"] },
+        "accountType": { "type": "string", "enum": ["personal", "business", "private_wealth"] },
+        "businessName": { "type": "string", "maxLength": 100 },
+        "primaryFocus": { "type": "string", "enum": ["savings_yield", "spending_cards", "wires_transfers", "lending_investing"] },
+        "monthlyVolume": { "type": "string", "enum": ["under_5k", "5k_25k", "25k_100k", "over_100k"] },
+        "onboardingCompleted": { "type": "boolean" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },

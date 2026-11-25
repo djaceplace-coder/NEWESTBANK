@@ -324,12 +324,6 @@ export function AuthModal({
             </div>
           )}
 
-          {mode === 'signup' && (
-            <p className="text-[11px] text-slate-400 leading-relaxed pt-1">
-              Instant portal access — no email confirmation required. Identity verification is completed directly inside your account.
-            </p>
-          )}
-
           <button
             type="submit"
             disabled={loading}
@@ -341,7 +335,7 @@ export function AuthModal({
               <>
                 <span>
                   {mode === 'signup'
-                    ? 'Open Account & Log In Immediately'
+                    ? 'Open Account'
                     : mode === 'reset'
                     ? 'Send Password Reset Email'
                     : 'Log In Securely'}

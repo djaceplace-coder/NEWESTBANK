@@ -106,6 +106,18 @@ service cloud.firestore {
       return val is string && val in ['client', 'admin'];
     }
 
+    function isValidAccountType(val) {
+      return val is string && val in ['personal', 'business', 'private_wealth'];
+    }
+
+    function isValidPrimaryFocus(val) {
+      return val is string && val in ['savings_yield', 'spending_cards', 'wires_transfers', 'lending_investing'];
+    }
+
+    function isValidMonthlyVolume(val) {
+      return val is string && val in ['under_5k', '5k_25k', '25k_100k', 'over_100k'];
+    }
+
     // =========================================================================
     // ENTITY VALIDATION BLUEPRINTS (Anti-Update-Gap)
     // =========================================================================
@@ -129,7 +141,8 @@ service cloud.firestore {
         data.keys().hasOnly([
           'uid', 'firstName', 'lastName', 'email', 'accountNumber', 'routingNumber',
           'pinCode', 'isVerified', 'isAdmin', 'isFrozen', 'isSuspended',
-          'biometricsEnabled', 'currency', 'createdAt', 'updatedAt'
+          'biometricsEnabled', 'currency', 'accountType', 'businessName',
+          'primaryFocus', 'monthlyVolume', 'onboardingCompleted', 'createdAt', 'updatedAt'
         ]) &&
         isValidId(data.uid) &&
         data.uid == docId &&
@@ -147,6 +160,11 @@ service cloud.firestore {
         data.isSuspended is bool &&
         data.biometricsEnabled is bool &&
         isValidCurrency(data.currency) &&
+        (!('accountType' in data) || data.accountType == null || isValidAccountType(data.accountType)) &&
+        isOptionalString(data, 'businessName', 100) &&
+        (!('primaryFocus' in data) || data.primaryFocus == null || isValidPrimaryFocus(data.primaryFocus)) &&
+        (!('monthlyVolume' in data) || data.monthlyVolume == null || isValidMonthlyVolume(data.monthlyVolume)) &&
+        (!('onboardingCompleted' in data) || data.onboardingCompleted is bool) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -415,7 +433,12 @@ service cloud.firestore {
               // Action: Update Transfer PIN
               incoming().diff(existing()).affectedKeys().hasOnly(['pinCode', 'updatedAt']) ||
               // Action: Toggle Biometrics
-              incoming().diff(existing()).affectedKeys().hasOnly(['biometricsEnabled', 'updatedAt'])
+              incoming().diff(existing()).affectedKeys().hasOnly(['biometricsEnabled', 'updatedAt']) ||
+              // Action: Complete First-Login Onboarding Personalization
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'accountType', 'businessName', 'primaryFocus', 'monthlyVolume',
+                'currency', 'onboardingCompleted', 'updatedAt'
+              ])
             )
           )
         );

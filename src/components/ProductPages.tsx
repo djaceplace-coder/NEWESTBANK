@@ -192,13 +192,13 @@ export function ProductPages({
             <span>Back to Home</span>
           </button>
 
-          <div className="flex items-center space-x-1 overflow-x-auto">
+          <div className="flex items-center space-x-1 overflow-x-auto w-full lg:w-auto pb-1 lg:pb-0 scrollbar-hide">
             {PRODUCT_TABS.map((t) => (
               <button
                 key={t.key}
                 type="button"
                 onClick={() => onSelectPage(t.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap cursor-pointer ${
                   page === t.key
                     ? 'bg-emerald-700 text-white'
                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/5'

@@ -4,7 +4,7 @@ This specification defines the rigorous security standards and test suites for t
 
 ## 1. Data Invariants and Integrity Rules
 
-1.  **Strict Profile Separation:** Users may only read and modify their own profiles (`/users/{userId}`) and setting states (`/settings/{userId}`).
+1.  **Strict Profile Separation:** Users may only read and modify their own profiles (`/users/{userId}`) and setting states (`/settings/{userId}`), restricted to allowlisted actions (name, currency, transfer PIN, biometrics, and first-login onboarding preferences such as `accountType`, `businessName`, `primaryFocus`, `monthlyVolume`, and `onboardingCompleted`) while permanently blocked from modifying privileged flags (`isAdmin`, `isVerified`, `isFrozen`, `isSuspended`).
 2.  **Asset Guarding:** Currency records (`/balances/{userId}`), cards (`/cards/{cardId}`), savings targets (`/savings_goals/{goalId}`), saved payees (`/beneficiaries/{beneficiaryId}`), notifications (`/notifications/{notificationId}`), and support/KYC packets (`/support_tickets/{ticketId}`) require strict owner matching (`request.auth.uid == ownerId`) or verified administrator privileges.
 3.  **Administrator Seclusion:** Authoritative administrator grants (`/admins/{adminUid}`) and security activity chronicles (`/admin_logs/{logId}`) may only be managed and queried by verified system-wide administrators.
 4.  **Transaction Ledger Non-Mutability:** Ledger records (`/transactions/{transactionId}`) are write-once. Users can create outbound spend records where `userId` equals their authentic credential UID, but are strictly forbidden from forging deposits or modifying/purging any previously committed ledger elements.

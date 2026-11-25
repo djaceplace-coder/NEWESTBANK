@@ -50,8 +50,11 @@ async function bootstrap() {
   // 2. Vite Middleware Setup
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa'
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
+      appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {

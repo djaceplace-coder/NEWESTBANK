@@ -52,14 +52,30 @@ import {
 interface DashboardViewProps {
   onOpenTransfer: () => void;
   onNavigateTab: (tab: string) => void;
+  autoOpenKyc?: boolean;
+  onConsumedAutoOpenKyc?: () => void;
 }
 
-export function DashboardView({ onOpenTransfer, onNavigateTab }: DashboardViewProps) {
+export function DashboardView({
+  onOpenTransfer,
+  onNavigateTab,
+  autoOpenKyc,
+  onConsumedAutoOpenKyc,
+}: DashboardViewProps) {
   const { user, balance, transactions, notifications, markNotificationAsRead, addFunds } = useStore();
   const currency = user?.currency || 'USD';
   const [hideBalances, setHideBalances] = useState(false);
   const [showKYC, setShowKYC] = useState(false);
   const [showAllBills, setShowAllBills] = useState(false);
+
+  React.useEffect(() => {
+    if (autoOpenKyc && user && !user.isVerified) {
+      setShowKYC(true);
+      onConsumedAutoOpenKyc?.();
+    } else if (autoOpenKyc) {
+      onConsumedAutoOpenKyc?.();
+    }
+  }, [autoOpenKyc, user, onConsumedAutoOpenKyc]);
 
   // AI Insights State
   const [aiInsight, setAiInsight] = useState<string | null>(null);
@@ -135,26 +151,37 @@ export function DashboardView({ onOpenTransfer, onNavigateTab }: DashboardViewPr
     s.tickets.some((t) => t.category.toLowerCase().includes('kyc') && t.status !== 'resolved')
   );
 
+  const accountTierLabel =
+    user?.accountType === 'business'
+      ? user.businessName
+        ? `Business Banking · ${user.businessName}`
+        : 'Business Banking'
+      : user?.accountType === 'private_wealth'
+      ? 'Private Wealth'
+      : 'Personal Banking';
+
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-6 md:p-8 font-sans space-y-6 select-none pb-24 transition-colors duration-300">
+    <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 p-4 sm:p-6 md:p-8 font-sans space-y-6 select-none pb-24 transition-colors duration-300">
       
-      {/* DIAGNOSTIC STATE BANNER */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 dark:border-white/5 pb-4 space-y-3 sm:space-y-0">
-        <div>
-          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono tracking-widest uppercase font-bold">Transaction History PORTAL</span>
-          <div className="flex items-center space-x-2 mt-1">
-            <h2 className="text-2xl font-sans tracking-tight font-medium text-slate-900 dark:text-white">
-              Hi, {user?.lastName || 'Valued Account'}
+      {/* HEADER BAR */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 dark:border-white/5 pb-4 gap-3">
+        <div className="min-w-0">
+          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono tracking-widest uppercase font-bold block truncate">
+            {accountTierLabel}
+          </span>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            <h2 className="text-xl sm:text-2xl font-sans tracking-tight font-medium text-slate-900 dark:text-white">
+              Hi, {user?.firstName || user?.lastName || 'Valued Client'}
             </h2>
             {user?.isVerified && (
               <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 text-[10px] font-mono uppercase font-bold rounded flex items-center space-x-1">
-                Verified Trust Earner
+                Verified Account
               </span>
             )}
           </div>
         </div>
         
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-3 shrink-0">
           <button 
             onClick={() => setHideBalances(!hideBalances)}
             className="w-10 h-10 rounded-xl border border-slate-200 dark:border-white/5 bg-white/50 dark:bg-white/5 flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer"

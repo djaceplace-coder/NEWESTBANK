@@ -10,6 +10,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
+  sendEmailVerification,
   updateProfile as updateFirebaseProfile,
   signOut,
   User as FirebaseUser,
@@ -224,6 +225,11 @@ const mapUserDoc = (id: string, d: DocumentData): UserProfile => ({
   isSuspended: Boolean(d.isSuspended),
   biometricsEnabled: Boolean(d.biometricsEnabled),
   currency: d.currency || 'USD',
+  accountType: d.accountType || undefined,
+  businessName: d.businessName || undefined,
+  primaryFocus: d.primaryFocus || undefined,
+  monthlyVolume: d.monthlyVolume || undefined,
+  onboardingCompleted: typeof d.onboardingCompleted === 'boolean' ? d.onboardingCompleted : undefined,
   createdAt: timestampToIso(d.createdAt),
 });
 
@@ -461,6 +467,15 @@ interface BankState {
   updatePinCode: (pin: string) => Promise<void>;
   updateProfile: (first: string, last: string) => Promise<void>;
   updateCurrency: (currency: 'USD' | 'EUR' | 'GBP') => Promise<void>;
+  completeOnboarding: (payload: {
+    accountType: 'personal' | 'business' | 'private_wealth';
+    businessName?: string;
+    primaryFocus: 'savings_yield' | 'spending_cards' | 'wires_transfers' | 'lending_investing';
+    monthlyVolume: 'under_5k' | '5k_25k' | '25k_100k' | 'over_100k';
+    currency: 'USD' | 'EUR' | 'GBP';
+  }) => Promise<boolean>;
+  requestAdminVerificationEmail: () => Promise<boolean>;
+  checkAndUnlockAdmin: () => Promise<boolean>;
   updateSettingsToggle: (
     key: keyof UserSecuritySettings,
     val: boolean | 'light' | 'dark' | 'system',
@@ -847,6 +862,7 @@ export const useStore = create<BankState>((set, get) => ({
           isSuspended: false,
           biometricsEnabled: false,
           currency: 'USD',
+          onboardingCompleted: isVerifiedBootstrapped ? true : false,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -952,6 +968,20 @@ export const useStore = create<BankState>((set, get) => ({
               updatedAt: serverTimestamp(),
             });
             needsRepair = true;
+          }
+        } else if (!userSnap.data()?.isAdmin) {
+          // Also honor an existing /admins/{uid} grant even if profile flag lagged
+          try {
+            const admSnap = await getDoc(adminRef);
+            if (admSnap.exists()) {
+              repairBatch.update(userRef, {
+                isAdmin: true,
+                updatedAt: serverTimestamp(),
+              });
+              needsRepair = true;
+            }
+          } catch {
+            // Non-admin user or no admin doc
           }
         }
 
@@ -1590,6 +1620,80 @@ export const useStore = create<BankState>((set, get) => ({
     } catch (e: any) {
       toast.error(e?.message || 'Operation failed');
       handleFirestoreError(e, OperationType.UPDATE, `users/${u.uid}`);
+    }
+  },
+
+  completeOnboarding: async ({
+    accountType,
+    businessName,
+    primaryFocus,
+    monthlyVolume,
+    currency,
+  }) => {
+    const u = get().user;
+    if (!u) return false;
+    const cleanBusinessName =
+      accountType === 'business' && businessName?.trim()
+        ? clampString(businessName, 100)
+        : null;
+    try {
+      await updateDoc(doc(db, 'users', u.uid), {
+        accountType,
+        businessName: cleanBusinessName,
+        primaryFocus,
+        monthlyVolume,
+        currency,
+        onboardingCompleted: true,
+        updatedAt: serverTimestamp(),
+      });
+      set({
+        user: {
+          ...u,
+          accountType,
+          businessName: cleanBusinessName || undefined,
+          primaryFocus,
+          monthlyVolume,
+          currency,
+          onboardingCompleted: true,
+        },
+      });
+      toast.success('Your Morning Bright workspace has been personalized.');
+      return true;
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to save onboarding preferences');
+      handleFirestoreError(e, OperationType.UPDATE, `users/${u.uid}`);
+    }
+  },
+
+  requestAdminVerificationEmail: async () => {
+    const fbUser = auth.currentUser;
+    if (!fbUser) return false;
+    try {
+      await sendEmailVerification(fbUser);
+      toast.success(`Verification email sent to ${fbUser.email}. Check your inbox and click the link, then return here.`);
+      return true;
+    } catch (e: any) {
+      toast.error(e?.message || 'Could not send verification email. Please wait a moment and try again.');
+      return false;
+    }
+  },
+
+  checkAndUnlockAdmin: async () => {
+    const fbUser = auth.currentUser;
+    if (!fbUser) return false;
+    try {
+      await fbUser.reload();
+      await fbUser.getIdToken(true);
+      if (!fbUser.emailVerified) {
+        toast.error('Email is not verified yet. Please click the verification link in your inbox first.');
+        return false;
+      }
+      await get().initRealtimeSubscriptions(fbUser);
+      toast.success('Administrator console unlocked!');
+      return true;
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to verify administrator session.');
+      return false;
     }
   },
 

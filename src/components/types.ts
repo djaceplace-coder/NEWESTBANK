@@ -45,6 +45,11 @@ export interface UserProfile {
   isSuspended: boolean;
   biometricsEnabled: boolean;
   currency?: 'USD' | 'EUR' | 'GBP';
+  accountType?: 'personal' | 'business' | 'private_wealth';
+  businessName?: string;
+  primaryFocus?: 'savings_yield' | 'spending_cards' | 'wires_transfers' | 'lending_investing';
+  monthlyVolume?: 'under_5k' | '5k_25k' | '25k_100k' | 'over_100k';
+  onboardingCompleted?: boolean;
   preProvisionedKey?: string;
   createdAt: string;
 }

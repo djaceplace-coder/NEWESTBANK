@@ -60,6 +60,7 @@ const NAV_PRODUCTS: { label: string; key: ProductPageKey }[] = [
   { label: 'Loans', key: 'loans' },
   { label: 'Investing', key: 'investing' },
   { label: 'Business', key: 'business' },
+  { label: 'About', key: 'about' },
 ];
 
 const COMPARISON_ROWS = [
@@ -94,9 +95,9 @@ const COMPARISON_ROWS = [
     traditional: 'Branch visit + $35+ fee',
   },
   {
-    feature: 'Account Access & Verification',
-    morningBright: 'Instant login + in-site KYC',
-    traditional: 'Multi-day email & branch wait',
+    feature: 'Account Setup & KYC',
+    morningBright: 'Guided 3-step onboarding & in-site KYC',
+    traditional: 'Multi-day branch & paperwork wait',
   },
   {
     feature: 'Direct Management Support',
@@ -194,8 +195,8 @@ const JOURNAL_ARTICLES: JournalArticle[] = [
 
 const FAQ_ITEMS = [
   {
-    q: 'Do I have to wait for an email confirmation link after signing up?',
-    a: 'No. When you register with your email and password—or when an administrator provisions an account for you—you are authenticated directly into your Morning Bright banking portal immediately. All identity and compliance verifications happen securely in-site.',
+    q: 'How does first-time account setup work?',
+    a: 'Once you create your account, a short 3-step onboarding flow lets you choose Personal, Business, or Private Wealth banking, set your primary goals and currency, and proceed directly to in-site identity verification or your dashboard.',
   },
   {
     q: 'When does Morning Bright ask for camera access?',
@@ -366,7 +367,7 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
 
       {/* CLEAN 3-ZONE HEADER */}
       <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-b border-slate-200 dark:border-white/10">
-        <div className="max-w-7xl mx-auto px-4 md:px-8 h-16 md:h-20 flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 md:h-20 flex items-center justify-between gap-4">
           <button
             type="button"
             onClick={() => navigateProduct('overview')}
@@ -378,7 +379,7 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
             </span>
           </button>
 
-          <nav className="hidden lg:flex items-center space-x-7">
+          <nav className="hidden xl:flex items-center gap-6 2xl:gap-7">
             {NAV_PRODUCTS.map((item) => {
               const isActive = activePage === item.key;
               return (
@@ -398,22 +399,11 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
             })}
           </nav>
 
-          <div className="hidden lg:flex items-center space-x-3 shrink-0">
-            <button
-              type="button"
-              onClick={() => navigateProduct('about')}
-              className={`text-sm font-semibold whitespace-nowrap transition-colors px-3 py-2 cursor-pointer ${
-                activePage === 'about'
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400'
-              }`}
-            >
-              About
-            </button>
+          <div className="hidden xl:flex items-center gap-3 shrink-0">
             <button
               type="button"
               onClick={onSignUp}
-              className="text-sm font-semibold whitespace-nowrap text-slate-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors px-3 py-2 cursor-pointer"
+              className="px-4 py-2.5 text-sm font-semibold whitespace-nowrap text-slate-900 dark:text-white bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 rounded-lg transition-colors cursor-pointer"
             >
               Open Account
             </button>
@@ -427,70 +417,68 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
             </button>
           </div>
 
-          {/* Mobile Menu Trigger */}
-          <div className="flex lg:hidden items-center space-x-3">
+          {/* Tablet & Mobile Actions + Menu Trigger */}
+          <div className="flex xl:hidden items-center gap-2 sm:gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={onSignUp}
+              className="hidden sm:inline-flex px-3.5 py-2 text-xs font-semibold text-slate-900 dark:text-white bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg cursor-pointer whitespace-nowrap"
+            >
+              Open Account
+            </button>
             <button
               type="button"
               onClick={onEnterApp}
-              className="px-3.5 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg cursor-pointer"
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer whitespace-nowrap"
             >
               Log In
             </button>
             <button
               type="button"
               aria-label="Toggle navigation menu"
-              className="p-2 text-slate-600 dark:text-slate-300 cursor-pointer"
+              className="p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 cursor-pointer"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             >
-              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              {mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
           </div>
         </div>
       </header>
 
-      {/* MOBILE MENU */}
+      {/* TABLET & MOBILE DRAWER */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="lg:hidden fixed inset-x-0 top-16 md:top-20 z-30 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 shadow-xl"
+            className="xl:hidden fixed inset-x-0 top-16 md:top-20 z-30 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 shadow-xl max-h-[calc(100vh-4rem)] overflow-y-auto"
           >
-            <div className="p-5 flex flex-col space-y-2.5">
-              {NAV_PRODUCTS.map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  onClick={() => navigateProduct(item.key)}
-                  className={`text-left text-base font-semibold py-2 border-b border-slate-100 dark:border-white/5 cursor-pointer ${
-                    activePage === item.key
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : 'text-slate-700 dark:text-slate-200'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => navigateProduct('about')}
-                className={`text-left text-base font-semibold py-2 border-b border-slate-100 dark:border-white/5 cursor-pointer ${
-                  activePage === 'about'
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-slate-700 dark:text-slate-200'
-                }`}
-              >
-                About & Trust
-              </button>
-              <div className="pt-3 grid grid-cols-2 gap-3">
+            <div className="max-w-7xl mx-auto p-5 sm:px-6 flex flex-col space-y-1">
+              <div className="grid sm:grid-cols-2 gap-1 sm:gap-x-6">
+                {NAV_PRODUCTS.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => navigateProduct(item.key)}
+                    className={`text-left text-base font-semibold py-3 px-2 rounded-lg border-b border-slate-100 dark:border-white/5 cursor-pointer transition-colors ${
+                      activePage === item.key
+                        ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50/50 dark:bg-emerald-500/10'
+                        : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <div className="pt-4 grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => {
                     setMobileMenuOpen(false);
                     onSignUp();
                   }}
-                  className="py-3 text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-500/10 rounded-lg text-center text-sm cursor-pointer"
+                  className="py-3 text-emerald-700 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-500/10 rounded-xl text-center text-sm cursor-pointer"
                 >
                   Open Account
                 </button>
@@ -500,7 +488,7 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
                     setMobileMenuOpen(false);
                     onEnterApp();
                   }}
-                  className="py-3 bg-emerald-600 text-white font-bold rounded-lg text-center text-sm cursor-pointer"
+                  className="py-3 bg-emerald-600 text-white font-bold rounded-xl text-center text-sm cursor-pointer"
                 >
                   Log In
                 </button>
@@ -521,42 +509,42 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
       ) : (
         <>
           {/* HERO SECTION */}
-          <section className="relative pt-10 pb-16 md:pt-16 md:pb-24 px-4 md:px-8 border-b border-slate-200 dark:border-white/10 bg-white dark:bg-slate-950">
-            <div className="max-w-7xl mx-auto grid lg:grid-cols-12 gap-10 lg:gap-12 items-center">
-              <div className="lg:col-span-6 space-y-6">
+          <section className="relative pt-8 pb-12 sm:pt-12 sm:pb-16 lg:pt-16 lg:pb-24 px-4 sm:px-6 lg:px-8 border-b border-slate-200 dark:border-white/10 bg-white dark:bg-slate-950">
+            <div className="max-w-7xl mx-auto grid lg:grid-cols-12 gap-8 sm:gap-10 lg:gap-12 items-center">
+              <div className="lg:col-span-6 space-y-5 sm:space-y-6">
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">
                   Private & Commercial Digital Banking
                 </p>
-                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.08]">
+                <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.08]">
                   Earn <span className="text-emerald-600 dark:text-emerald-400 tabular-nums">6.00% APY</span> on savings, backed by private-grade banking.
                 </h1>
-                <p className="text-base sm:text-lg text-slate-600 dark:text-slate-300 max-w-xl leading-relaxed">
-                  Zero monthly maintenance fees, <span className="font-semibold text-slate-900 dark:text-white tabular-nums">25,000+</span> fee-free ATMs, instant virtual cards, and direct portal access with no email-confirmation wait. Open with a <span className="font-semibold text-slate-900 dark:text-white tabular-nums">$0</span> minimum balance.
+                <p className="text-sm sm:text-base md:text-lg text-slate-600 dark:text-slate-300 max-w-xl leading-relaxed">
+                  Zero monthly maintenance fees, <span className="font-semibold text-slate-900 dark:text-white tabular-nums">25,000+</span> fee-free ATMs, instant virtual cards, and personalized personal or business onboarding. Open with a <span className="font-semibold text-slate-900 dark:text-white tabular-nums">$0</span> minimum balance.
                 </p>
 
-                <div className="flex flex-wrap items-center gap-3 pt-1">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
                   <button
                     type="button"
                     onClick={onSignUp}
-                    className="px-7 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-colors shadow-sm inline-flex items-center space-x-2 cursor-pointer"
+                    className="w-full sm:w-auto px-7 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-colors shadow-sm inline-flex items-center justify-center space-x-2 cursor-pointer"
                   >
-                    <span>Open Account Instantly</span>
+                    <span>Open Account</span>
                     <ArrowRight size={17} />
                   </button>
                   <button
                     type="button"
                     onClick={onEnterApp}
-                    className="px-6 py-3.5 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-900 dark:text-white font-semibold rounded-xl border border-slate-200 dark:border-white/10 transition-colors cursor-pointer"
+                    className="w-full sm:w-auto px-6 py-3.5 bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-900 dark:text-white font-semibold rounded-xl border border-slate-200 dark:border-white/10 transition-colors text-center cursor-pointer"
                   >
                     Client Portal Login
                   </button>
                 </div>
 
                 {/* $500 Welcome Bonus Card */}
-                <div className="p-5 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 max-w-xl">
-                  <div className="flex items-start justify-between gap-4 mb-3">
+                <div className="p-4 sm:p-5 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/10 max-w-xl">
+                  <div className="flex items-start justify-between gap-3 mb-3">
                     <div>
-                      <h2 className="font-bold text-slate-900 dark:text-white text-base">
+                      <h2 className="font-bold text-slate-900 dark:text-white text-sm sm:text-base">
                         Earn a <span className="text-emerald-600 dark:text-emerald-400 tabular-nums">$500</span> Welcome Bonus
                       </h2>
                       <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -567,10 +555,10 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
                       $0 MIN
                     </span>
                   </div>
-                  <div className="grid sm:grid-cols-3 gap-3 text-xs text-slate-600 dark:text-slate-300 pt-2 border-t border-slate-200 dark:border-white/10">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 text-xs text-slate-600 dark:text-slate-300 pt-3 border-t border-slate-200 dark:border-white/10">
                     <div className="flex items-start space-x-2">
                       <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">01</span>
-                      <span>Sign up & enter portal immediately</span>
+                      <span>Choose personal or business profile</span>
                     </div>
                     <div className="flex items-start space-x-2">
                       <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">02</span>
@@ -589,22 +577,22 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
                   <img
                     src={heroPrivateImg}
                     alt="Morning Bright Private Banking headquarters lounge"
-                    className="w-full h-[360px] sm:h-[460px] object-cover"
+                    className="w-full h-[260px] sm:h-[360px] md:h-[420px] lg:h-[460px] object-cover"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent" />
-                  <div className="absolute bottom-0 inset-x-0 p-6 sm:p-7 flex flex-col sm:flex-row sm:items-end justify-between gap-4 text-white">
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent" />
+                  <div className="absolute bottom-0 inset-x-0 p-5 sm:p-7 flex flex-col sm:flex-row sm:items-end justify-between gap-3 sm:gap-4 text-white">
                     <div>
                       <p className="text-[11px] font-mono uppercase tracking-[0.18em] text-emerald-300 mb-1">
                         Unified Client Ledger
                       </p>
-                      <p className="text-lg sm:text-xl font-bold leading-snug">
+                      <p className="text-base sm:text-lg md:text-xl font-bold leading-snug">
                         Checking, 6.00% APY Vaults, Wires & Management Desk in one portal.
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => navigateProduct('savings')}
-                      className="shrink-0 px-4 py-2.5 bg-white/15 hover:bg-white/25 backdrop-blur-md text-white text-xs font-bold rounded-lg border border-white/20 transition-colors cursor-pointer"
+                      className="w-full sm:w-auto shrink-0 px-4 py-2.5 bg-white/15 hover:bg-white/25 backdrop-blur-md text-white text-xs font-bold rounded-lg border border-white/20 transition-colors cursor-pointer text-center"
                     >
                       Calculate Yield →
                     </button>
@@ -616,15 +604,15 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
 
           {/* 4-COLUMN INSTITUTIONAL KPI STRIP */}
           <section className="bg-slate-100/80 dark:bg-slate-900/70 border-b border-slate-200 dark:border-white/10">
-            <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 grid grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 sm:py-8 grid grid-cols-2 md:grid-cols-4 gap-5 sm:gap-8">
               {[
                 { value: '$4.8B+', label: 'Client Assets Safeguarded' },
                 { value: '6.00% APY', label: 'High-Yield Savings Rate' },
                 { value: '25,000+', label: 'Fee-Free ATMs Nationwide' },
-                { value: 'Instant', label: 'Direct Sign-Up & In-Site KYC' },
+                { value: 'In-Site', label: 'Guided Onboarding & KYC' },
               ].map((stat, idx) => (
                 <div key={idx} className="space-y-1">
-                  <div className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white tabular-nums">
+                  <div className="text-xl sm:text-2xl lg:text-3xl font-bold tracking-tight text-slate-900 dark:text-white tabular-nums">
                     {stat.value}
                   </div>
                   <div className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-400">
@@ -728,23 +716,56 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
             </div>
           </section>
 
-          {/* TRANSPARENT COMPARISON TABLE */}
-          <section className="py-20 bg-white dark:bg-slate-900/50 border-y border-slate-200 dark:border-white/10">
-            <div className="max-w-7xl mx-auto px-4 md:px-8">
-              <div className="max-w-2xl mb-10">
+          {/* TRANSPARENT COMPARISON TABLE (Cards on Mobile, Table on Tablet & Desktop) */}
+          <section className="py-16 sm:py-20 bg-white dark:bg-slate-900/50 border-y border-slate-200 dark:border-white/10">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="max-w-2xl mb-8 sm:mb-10">
                 <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400 mb-2">
                   Fee & Yield Transparency
                 </p>
-                <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-3">
+                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-3">
                   See how Morning Bright compares to legacy banks.
                 </h2>
-                <p className="text-slate-600 dark:text-slate-400 text-base">
+                <p className="text-slate-600 dark:text-slate-400 text-sm sm:text-base">
                   No hidden account minimums, no wire-desk branch appointments, and direct access to real operations specialists inside your dashboard.
                 </p>
               </div>
 
-              <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-950 shadow-sm">
-                <table className="w-full text-left border-collapse min-w-[600px]">
+              {/* Mobile Stacked Comparison Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 md:hidden">
+                {COMPARISON_ROWS.map((row, i) => (
+                  <div
+                    key={i}
+                    className="p-4 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-950 space-y-3"
+                  >
+                    <div className="font-bold text-sm text-slate-900 dark:text-white">
+                      {row.feature}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2.5 text-xs">
+                      <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 mb-1">
+                          Morning Bright
+                        </div>
+                        <div className="font-bold text-emerald-800 dark:text-emerald-300 tabular-nums">
+                          {row.morningBright}
+                        </div>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                          National Avg.
+                        </div>
+                        <div className="font-medium text-slate-600 dark:text-slate-400 tabular-nums">
+                          {row.traditional}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Tablet & Desktop Institutional Comparison Table */}
+              <div className="hidden md:block overflow-x-auto rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-950 shadow-sm">
+                <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900/80">
                       <th className="py-4 px-6 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -782,32 +803,32 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
           </section>
 
           {/* 3-STEP ONBOARDING ARCHITECTURE */}
-          <section className="py-20 max-w-7xl mx-auto px-4 md:px-8">
-            <div className="max-w-2xl mb-12">
+          <section className="py-16 sm:py-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="max-w-2xl mb-10 sm:mb-12">
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400 mb-2">
                 Streamlined Onboarding
               </p>
-              <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-3">
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-slate-900 dark:text-white mb-3">
                 From registration to active banking in minutes.
               </h2>
-              <p className="text-slate-600 dark:text-slate-400 text-base">
-                Every onboarding and compliance step happens cleanly inside the site—no external email confirmation loops or premature device permission prompts.
+              <p className="text-slate-600 dark:text-slate-400 text-sm sm:text-base">
+                Every onboarding and compliance step happens cleanly inside the platform, tailored around whether you bank as an individual, business, or private wealth member.
               </p>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-6">
               {[
                 {
                   step: '01',
                   icon: Clock,
-                  title: 'Register & Log In Immediately',
-                  desc: 'Create your profile with email and password and step straight into your client dashboard without waiting on email confirmation links.',
+                  title: 'Register & Personalize Your Profile',
+                  desc: 'Create your account and answer three quick onboarding questions—selecting Personal, Business, or Private Wealth preferences and base currency.',
                 },
                 {
                   step: '02',
                   icon: FileCheck2,
                   title: 'Verify Identity In-Site',
-                  desc: 'When ready to unlock full clearing limits, submit your government ID inside the dashboard by uploading a file or using on-demand camera capture.',
+                  desc: 'Complete KYC verification directly inside your dashboard by uploading a document or using on-demand camera capture whenever you are ready.',
                 },
                 {
                   step: '03',
@@ -818,10 +839,10 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
               ].map((item, i) => (
                 <div
                   key={i}
-                  className="p-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 flex flex-col justify-between"
+                  className="p-6 sm:p-7 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 flex flex-col justify-between"
                 >
                   <div>
-                    <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center justify-between mb-5">
                       <span className="font-mono text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
                         {item.step}
                       </span>
@@ -829,7 +850,7 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
                         <item.icon size={20} />
                       </div>
                     </div>
-                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2.5">
+                    <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">
                       {item.title}
                     </h3>
                     <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
@@ -1131,37 +1152,37 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
           </section>
 
           {/* CLOSING CONVERSION BAND */}
-          <section className="px-4 md:px-8 pb-20">
+          <section className="px-4 sm:px-6 lg:px-8 pb-16 sm:pb-20">
             <div className="max-w-7xl mx-auto relative rounded-3xl overflow-hidden border border-slate-200 dark:border-white/10 bg-slate-950 text-white">
               <img
                 src={heroArchitectureImg}
                 alt="Morning Bright headquarters architecture"
                 className="absolute inset-0 w-full h-full object-cover opacity-25"
               />
-              <div className="relative z-10 p-8 sm:p-12 lg:p-16 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+              <div className="relative z-10 p-6 sm:p-10 lg:p-16 flex flex-col lg:flex-row lg:items-center justify-between gap-6 lg:gap-8">
                 <div className="max-w-2xl space-y-3">
                   <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-400">
                     Open Your Account Today
                   </p>
-                  <h2 className="text-3xl sm:text-4xl font-bold tracking-tight leading-tight">
-                    Start earning 6.00% APY with immediate portal access.
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight leading-tight">
+                    Start earning 6.00% APY with modern personal or business banking.
                   </h2>
-                  <p className="text-slate-300 text-base">
-                    Sign up with email and password in under a minute, manage personal or business balances cleanly, and connect directly with management whenever you need support.
+                  <p className="text-slate-300 text-sm sm:text-base">
+                    Open an account in minutes, personalize your workspace, manage balances cleanly, and connect directly with management whenever you need support.
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-3 shrink-0">
+                <div className="flex flex-col sm:flex-row gap-3 shrink-0">
                   <button
                     type="button"
                     onClick={onSignUp}
-                    className="px-7 py-3.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl transition-colors cursor-pointer"
+                    className="w-full sm:w-auto px-7 py-3.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold rounded-xl transition-colors cursor-pointer text-center"
                   >
                     Open Personal Account
                   </button>
                   <button
                     type="button"
                     onClick={() => navigateProduct('business')}
-                    className="px-6 py-3.5 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl border border-white/20 transition-colors cursor-pointer"
+                    className="w-full sm:w-auto px-6 py-3.5 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl border border-white/20 transition-colors cursor-pointer text-center"
                   >
                     Explore Business Banking
                   </button>
@@ -1173,10 +1194,10 @@ export function LandingPage({ onEnterApp, onSignUp, onForgotPassword }: LandingP
       )}
 
       {/* STRUCTURED 5-COLUMN FOOTER */}
-      <footer className="bg-slate-100 dark:bg-slate-950 border-t border-slate-200 dark:border-white/10 pt-16 pb-10">
-        <div className="max-w-7xl mx-auto px-4 md:px-8">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-12">
-            <div className="col-span-2 md:col-span-1 space-y-4">
+      <footer className="bg-slate-100 dark:bg-slate-950 border-t border-slate-200 dark:border-white/10 pt-14 sm:pt-16 pb-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-8 mb-12">
+            <div className="sm:col-span-2 md:col-span-3 lg:col-span-1 space-y-4">
               <button
                 type="button"
                 onClick={() => navigateProduct('overview')}
