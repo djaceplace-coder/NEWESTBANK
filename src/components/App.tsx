@@ -8,6 +8,7 @@ import { useStore } from '../store';
 import { isBootstrappedAdminEmail } from '../firebase';
 import { LandingPage } from './LandingPage';
 import { AuthModal } from './AuthModal';
+import { AdminPasscodeGate } from './AdminPasscodeGate';
 import { OnboardingFlow } from './OnboardingFlow';
 import { Sidebar } from './Sidebar';
 import { Logo } from './Logo';
@@ -35,11 +36,7 @@ import {
   Settings,
   Download,
   Mail,
-  KeyRound,
-  Eye,
-  EyeOff,
   ArrowLeft,
-  ArrowRight,
   RefreshCw,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
@@ -62,10 +59,7 @@ export default function App() {
     user,
     settings,
     authChecked,
-    loading,
-    errorMessage,
     clearError,
-    signInWithEmail,
     logOutUser,
     initAuthListener,
     requestAdminVerificationEmail,
@@ -80,10 +74,8 @@ export default function App() {
   const [showInstallModal, setShowInstallModal] = useState(false);
   const [autoOpenKyc, setAutoOpenKyc] = useState(false);
 
-  // Admin portal login form state (when visiting /admin while signed out)
-  const [adminEmail, setAdminEmail] = useState('');
-  const [adminPassword, setAdminPassword] = useState('');
-  const [showAdminPassword, setShowAdminPassword] = useState(false);
+  // Server-verified HMAC Bearer token held strictly in React memory (never localStorage/sessionStorage)
+  const [adminPasscodeToken, setAdminPasscodeToken] = useState<string | null>(null);
   const [adminUnlockBusy, setAdminUnlockBusy] = useState(false);
 
   const [isPWA, setIsPWA] = useState(false);
@@ -127,7 +119,13 @@ export default function App() {
     window.history.replaceState(null, '', '/');
     setIsAdminRoute(false);
     setCurrentTab('home');
+    setAdminPasscodeToken(null);
     clearError();
+  };
+
+  const handleSecureLogOut = async () => {
+    setAdminPasscodeToken(null);
+    await logOutUser();
   };
 
   // Setup PWA listener
@@ -210,15 +208,6 @@ export default function App() {
     setIsAuthModalOpen(true);
   };
 
-  const handleAdminRouteSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    clearError();
-    const ok = await signInWithEmail(adminEmail, adminPassword);
-    if (ok) {
-      setCurrentTab('admin');
-    }
-  };
-
   // If user is suspended, block navigation and display recovery gate
   if (user?.isSuspended) {
     return (
@@ -245,7 +234,7 @@ export default function App() {
 
           <div className="pt-4 border-t border-white/5 w-full flex flex-col space-y-3">
             <button
-              onClick={logOutUser}
+              onClick={handleSecureLogOut}
               className="h-11 rounded-lg bg-white text-black font-bold text-xs cursor-pointer"
             >
               Sign Out Securely
@@ -268,11 +257,41 @@ export default function App() {
       !isAdminRoute,
   );
 
-  // Render Admin access gate when navigating to /admin without full admin flag yet
+  // Render Admin view once inside portal (requires server-verified passcode token in memory)
   const renderAdminView = () => {
+    if (!adminPasscodeToken) {
+      return (
+        <div className="flex-1 overflow-y-auto">
+          <AdminPasscodeGate
+            onUnlocked={(token) => setAdminPasscodeToken(token)}
+            onExit={() => handleChangeTab('home')}
+          />
+        </div>
+      );
+    }
+
     if (!user) return null;
+
     if (user.isAdmin) {
-      return <AdminPanel />;
+      return (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="bg-slate-900 text-slate-200 border-b border-white/10 px-4 sm:px-6 py-2 flex items-center justify-between text-xs shrink-0">
+            <span className="inline-flex items-center space-x-2 font-mono text-emerald-400">
+              <ShieldCheck size={14} />
+              <span>Passcode-Verified Admin Session Active</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setAdminPasscodeToken(null)}
+              className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-md bg-white/10 hover:bg-white/15 text-white font-semibold transition-colors cursor-pointer"
+            >
+              <Lock size={12} />
+              <span>Lock Console</span>
+            </button>
+          </div>
+          <AdminPanel />
+        </div>
+      );
     }
 
     const isRecognizedAdminEmail = isBootstrappedAdminEmail(user.email);
@@ -287,22 +306,16 @@ export default function App() {
               </div>
               <div>
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                  Activate Administrator Console
+                  Passcode Verified — Activate Firestore Admin Link
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                  Signed in as <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">{user.email}</span>. Your email is authorized as a system administrator. Complete this one-time email verification check so Firestore grants permanent admin access to your account.
+                  Your passcode is verified. Complete this one-time Firebase check for{' '}
+                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+                    {user.email}
+                  </span>{' '}
+                  so Firestore grants permanent read/write access to all client ledgers.
                 </p>
               </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300 space-y-2">
-              <div className="font-semibold text-slate-900 dark:text-white">
-                Two quick steps:
-              </div>
-              <ol className="list-decimal list-inside space-y-1">
-                <li>Click <strong>Send Verification Link</strong> and open the link sent to your inbox.</li>
-                <li>Return here and click <strong>I&apos;ve Verified — Unlock Admin Panel</strong>.</li>
-              </ol>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
@@ -330,7 +343,7 @@ export default function App() {
                 className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw size={15} className={adminUnlockBusy ? 'animate-spin' : ''} />
-                <span>I&apos;ve Verified — Unlock Admin Panel</span>
+                <span>Unlock Admin Panel</span>
               </button>
             </div>
 
@@ -344,10 +357,10 @@ export default function App() {
               </button>
               <button
                 type="button"
-                onClick={logOutUser}
+                onClick={handleSecureLogOut}
                 className="text-red-500 hover:text-red-400 font-semibold cursor-pointer"
               >
-                Switch Account
+                Sign Out
               </button>
             </div>
           </div>
@@ -362,10 +375,11 @@ export default function App() {
             <ShieldAlert size={24} />
           </div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-            Administrator Access Required
+            Administrator Account Required
           </h2>
           <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-            Your account (<span className="font-mono">{user.email}</span>) does not currently hold administrator permissions. Sign in with an administrator account or contact operations management.
+            Your passcode is verified, but the currently active client session (
+            <span className="font-mono">{user.email}</span>) does not hold Firestore admin database permissions. Sign out and connect an authorized administrator session to manage client records.
           </p>
           <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
             <button
@@ -377,7 +391,7 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={logOutUser}
+              onClick={handleSecureLogOut}
               className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 text-xs font-semibold cursor-pointer"
             >
               Sign Out
@@ -418,120 +432,57 @@ export default function App() {
               Restoring secure session...
             </p>
           </div>
-        ) : !user && isAdminRoute ? (
-          // DEDICATED /admin SIGN-IN CONSOLE
+        ) : isAdminRoute && !adminPasscodeToken ? (
+          // PASSCODE-ONLY /admin ACCESS GATE (ZERO EMAIL INPUT)
+          <AdminPasscodeGate
+            onUnlocked={(token) => {
+              setAdminPasscodeToken(token);
+              setCurrentTab('admin');
+            }}
+            onExit={exitAdminRouteToSite}
+          />
+        ) : !user && isAdminRoute && adminPasscodeToken ? (
+          // PASSCODE VERIFIED — CONNECT FIREBASE DATABASE SESSION
           <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6">
-            <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <Logo className="w-9 h-9" withBackground={true} />
-                  <div>
-                    <span className="font-bold text-base text-white block leading-tight">
-                      Morning Bright
-                    </span>
-                    <span className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">
-                      Operations & Admin Console
-                    </span>
-                  </div>
-                </div>
-                <Lock size={18} className="text-slate-500" />
+            <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6 text-center">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <ShieldCheck size={28} />
               </div>
-
-              <div className="space-y-1">
-                <h1 className="text-xl font-bold text-white">Administrator Sign-In</h1>
-                <p className="text-xs text-slate-400">
-                  Enter your administrator credentials to access client accounts, balances, KYC queues, and management chat.
+              <div className="space-y-2">
+                <h1 className="text-xl font-bold text-white">Passcode Verified</h1>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Connect your authorized Morning Bright administrator session to load live Firestore accounts, balances, KYC queues, and management chat.
                 </p>
               </div>
-
-              {errorMessage && (
-                <div className="p-3 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs">
-                  {errorMessage}
-                </div>
-              )}
-
-              <form onSubmit={handleAdminRouteSignIn} className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
-                    Administrator Email
-                  </label>
-                  <div className="relative">
-                    <Mail size={14} className="absolute left-3.5 top-3.5 text-slate-500" />
-                    <input
-                      type="email"
-                      required
-                      autoComplete="email"
-                      value={adminEmail}
-                      onChange={(e) => setAdminEmail(e.target.value)}
-                      placeholder="admin@morningbrightfinance.com"
-                      className="w-full h-11 pl-10 pr-3 rounded-xl border border-white/10 bg-slate-950 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
-                    Password
-                  </label>
-                  <div className="relative">
-                    <KeyRound size={14} className="absolute left-3.5 top-3.5 text-slate-500" />
-                    <input
-                      type={showAdminPassword ? 'text' : 'password'}
-                      required
-                      autoComplete="current-password"
-                      value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
-                      placeholder="Enter your password"
-                      className="w-full h-11 pl-10 pr-10 rounded-xl border border-white/10 bg-slate-950 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowAdminPassword(!showAdminPassword)}
-                      className="absolute right-3 top-3 text-slate-500 hover:text-slate-300 cursor-pointer"
-                      aria-label="Toggle password visibility"
-                    >
-                      {showAdminPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                </div>
-
+              <div className="flex flex-col space-y-3">
                 <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+                  type="button"
+                  onClick={handleOpenAuth}
+                  className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors cursor-pointer"
                 >
-                  {loading ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <>
-                      <span>Sign In to Admin Panel</span>
-                      <ArrowRight size={14} />
-                    </>
-                  )}
+                  Connect Administrator Database Session
                 </button>
-              </form>
-
-              <div className="pt-3 border-t border-white/10 flex items-center justify-between text-xs">
                 <button
                   type="button"
                   onClick={exitAdminRouteToSite}
-                  className="inline-flex items-center space-x-1.5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  className="inline-flex items-center justify-center space-x-1.5 text-xs text-slate-400 hover:text-white py-2 cursor-pointer"
                 >
                   <ArrowLeft size={14} />
-                  <span>Return to Website</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    exitAdminRouteToSite();
-                    handleOpenSignUp();
-                  }}
-                  className="text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer"
-                >
-                  Register Account
+                  <span>Lock Console & Return to Website</span>
                 </button>
               </div>
             </div>
+
+            <AnimatePresence>
+              {isAuthModalOpen && (
+                <AuthModal
+                  isOpen={isAuthModalOpen}
+                  onClose={() => setIsAuthModalOpen(false)}
+                  onSuccess={() => setCurrentTab('admin')}
+                  initialMode={authModalMode}
+                />
+              )}
+            </AnimatePresence>
           </div>
         ) : !user ? (
           // PUBLIC FACING SITE
@@ -663,7 +614,7 @@ export default function App() {
                             type="button"
                             onClick={() => {
                               setIsHeaderDropdownOpen(false);
-                              logOutUser();
+                              handleSecureLogOut();
                             }}
                             className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-xs text-red-600 dark:text-red-400 font-medium cursor-pointer"
                           >
