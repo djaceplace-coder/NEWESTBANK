@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store';
 import { isBootstrappedAdminEmail } from '../firebase';
 import { LandingPage } from './LandingPage';
@@ -38,6 +38,10 @@ import {
   Mail,
   ArrowLeft,
   RefreshCw,
+  KeyRound,
+  Eye,
+  EyeOff,
+  AlertCircle,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Toaster } from 'react-hot-toast';
@@ -51,7 +55,14 @@ declare global {
 
 const isAdminPathname = () => {
   if (typeof window === 'undefined') return false;
-  return window.location.pathname.toLowerCase().startsWith('/admin');
+  const path = window.location.pathname.toLowerCase();
+  const hash = window.location.hash.toLowerCase();
+  const search = new URLSearchParams(window.location.search);
+  return (
+    path.startsWith('/admin') ||
+    hash.startsWith('#/admin') ||
+    search.get('admin') === '1'
+  );
 };
 
 export default function App() {
@@ -59,11 +70,18 @@ export default function App() {
     user,
     settings,
     authChecked,
+    loading,
+    errorMessage,
+    successMessage,
     clearError,
     logOutUser,
     initAuthListener,
+    signInWithEmail,
+    sendPasswordReset,
     requestAdminVerificationEmail,
     checkAndUnlockAdmin,
+    signInAdminWithGoogle,
+    connectAdminFirebaseSession,
   } = useStore();
 
   const [isAdminRoute, setIsAdminRoute] = useState<boolean>(isAdminPathname);
@@ -76,9 +94,26 @@ export default function App() {
 
   // Server-verified HMAC Bearer token held strictly in React memory (never localStorage/sessionStorage)
   const [adminPasscodeToken, setAdminPasscodeToken] = useState<string | null>(null);
+  const [adminAuthEmail, setAdminAuthEmail] = useState<string>('adereraadenike@gmail.com');
+  const [adminSyncBusy, setAdminSyncBusy] = useState(false);
+  const [adminSyncNeeded, setAdminSyncNeeded] = useState(false);
+  const [syncPassword, setSyncPassword] = useState('');
+  const [showSyncPassword, setShowSyncPassword] = useState(false);
   const [adminUnlockBusy, setAdminUnlockBusy] = useState(false);
+  const prevUserUidRef = useRef<string | null>(null);
 
   const [isPWA, setIsPWA] = useState(false);
+
+  // Clear in-memory admin passcode token if user signs out from any view
+  useEffect(() => {
+    const currentUid = user?.uid ?? null;
+    if (prevUserUidRef.current && !currentUid) {
+      setAdminPasscodeToken(null);
+      setAdminSyncNeeded(false);
+      setSyncPassword('');
+    }
+    prevUserUidRef.current = currentUid;
+  }, [user?.uid]);
 
   // Sync /admin URL path with browser history
   useEffect(() => {
@@ -120,12 +155,45 @@ export default function App() {
     setIsAdminRoute(false);
     setCurrentTab('home');
     setAdminPasscodeToken(null);
+    setAdminSyncNeeded(false);
+    setSyncPassword('');
     clearError();
   };
 
   const handleSecureLogOut = async () => {
     setAdminPasscodeToken(null);
+    setAdminSyncNeeded(false);
+    setSyncPassword('');
     await logOutUser();
+  };
+
+  const handleAdminPasscodeUnlocked = async ({
+    token,
+    passcode,
+    adminAuthEmail: resolvedEmail,
+  }: {
+    token: string;
+    passcode: string;
+    adminAuthEmail?: string;
+  }) => {
+    const targetEmail = (resolvedEmail || 'adereraadenike@gmail.com')
+      .trim()
+      .toLowerCase();
+    setAdminPasscodeToken(token);
+    setAdminAuthEmail(targetEmail);
+    setCurrentTab('admin');
+    setAdminSyncNeeded(false);
+    setSyncPassword('');
+    clearError();
+
+    if (!user) {
+      setAdminSyncBusy(true);
+      const result = await connectAdminFirebaseSession(targetEmail, passcode);
+      setAdminSyncBusy(false);
+      if (result === 'needs_password_sync') {
+        setAdminSyncNeeded(true);
+      }
+    }
   };
 
   // Setup PWA listener
@@ -263,7 +331,7 @@ export default function App() {
       return (
         <div className="flex-1 overflow-y-auto">
           <AdminPasscodeGate
-            onUnlocked={(token) => setAdminPasscodeToken(token)}
+            onUnlocked={handleAdminPasscodeUnlocked}
             onExit={() => handleChangeTab('home')}
           />
         </div>
@@ -318,6 +386,21 @@ export default function App() {
               </div>
             </div>
 
+            <button
+              type="button"
+              disabled={adminUnlockBusy || loading}
+              onClick={async () => {
+                setAdminUnlockBusy(true);
+                const ok = await signInAdminWithGoogle();
+                if (ok) setCurrentTab('admin');
+                setAdminUnlockBusy(false);
+              }}
+              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+            >
+              <ShieldCheck size={15} />
+              <span>One-Click Owner Verification</span>
+            </button>
+
             <div className="flex flex-col sm:flex-row gap-3">
               <button
                 type="button"
@@ -340,10 +423,10 @@ export default function App() {
                   await checkAndUnlockAdmin();
                   setAdminUnlockBusy(false);
                 }}
-                className="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+                className="flex-1 py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white/10 dark:hover:bg-white/15 text-white text-xs font-bold inline-flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
               >
                 <RefreshCw size={15} className={adminUnlockBusy ? 'animate-spin' : ''} />
-                <span>Unlock Admin Panel</span>
+                <span>Check Verification</span>
               </button>
             </div>
 
@@ -381,21 +464,35 @@ export default function App() {
             Your passcode is verified, but the currently active client session (
             <span className="font-mono">{user.email}</span>) does not hold Firestore admin database permissions. Sign out and connect an authorized administrator session to manage client records.
           </p>
-          <div className="flex flex-col sm:flex-row gap-2.5 pt-2">
+          <div className="space-y-2.5 pt-2">
             <button
               type="button"
-              onClick={() => handleChangeTab('home')}
-              className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold cursor-pointer"
+              disabled={loading}
+              onClick={async () => {
+                const ok = await signInAdminWithGoogle();
+                if (ok) setCurrentTab('admin');
+              }}
+              className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
             >
-              Return to Dashboard
+              <ShieldCheck size={15} />
+              <span>One-Click Owner Sign-In</span>
             </button>
-            <button
-              type="button"
-              onClick={handleSecureLogOut}
-              className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 text-xs font-semibold cursor-pointer"
-            >
-              Sign Out
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2.5">
+              <button
+                type="button"
+                onClick={() => handleChangeTab('home')}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 text-xs font-semibold cursor-pointer"
+              >
+                Return to Dashboard
+              </button>
+              <button
+                type="button"
+                onClick={handleSecureLogOut}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-800 dark:text-slate-200 text-xs font-semibold cursor-pointer"
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -435,54 +532,141 @@ export default function App() {
         ) : isAdminRoute && !adminPasscodeToken ? (
           // PASSCODE-ONLY /admin ACCESS GATE (ZERO EMAIL INPUT)
           <AdminPasscodeGate
-            onUnlocked={(token) => {
-              setAdminPasscodeToken(token);
-              setCurrentTab('admin');
-            }}
+            onUnlocked={handleAdminPasscodeUnlocked}
             onExit={exitAdminRouteToSite}
           />
         ) : !user && isAdminRoute && adminPasscodeToken ? (
-          // PASSCODE VERIFIED — CONNECT FIREBASE DATABASE SESSION
+          // PASSCODE VERIFIED — ZERO-EMAIL DATABASE LINKING
           <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-4 sm:p-6">
-            <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6 text-center">
-              <div className="w-14 h-14 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-                <ShieldCheck size={28} />
+            <div className="w-full max-w-md bg-slate-900 border border-white/10 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
+              <div className="flex flex-col items-center text-center space-y-3">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <ShieldCheck size={28} />
+                </div>
+                <div className="space-y-1.5">
+                  <h1 className="text-xl font-bold text-white">
+                    {adminSyncBusy ? 'Unlocking Operations Console...' : 'Passcode Verified'}
+                  </h1>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    {adminSyncBusy
+                      ? 'Connecting your encrypted Firestore administrator session...'
+                      : 'Authorize your administrator database session below to load live client accounts, balances, KYC queues, and management chat.'}
+                  </p>
+                </div>
               </div>
-              <div className="space-y-2">
-                <h1 className="text-xl font-bold text-white">Passcode Verified</h1>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Connect your authorized Morning Bright administrator session to load live Firestore accounts, balances, KYC queues, and management chat.
-                </p>
-              </div>
-              <div className="flex flex-col space-y-3">
-                <button
-                  type="button"
-                  onClick={handleOpenAuth}
-                  className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors cursor-pointer"
-                >
-                  Connect Administrator Database Session
-                </button>
-                <button
-                  type="button"
-                  onClick={exitAdminRouteToSite}
-                  className="inline-flex items-center justify-center space-x-1.5 text-xs text-slate-400 hover:text-white py-2 cursor-pointer"
-                >
-                  <ArrowLeft size={14} />
-                  <span>Lock Console & Return to Website</span>
-                </button>
-              </div>
-            </div>
 
-            <AnimatePresence>
-              {isAuthModalOpen && (
-                <AuthModal
-                  isOpen={isAuthModalOpen}
-                  onClose={() => setIsAuthModalOpen(false)}
-                  onSuccess={() => setCurrentTab('admin')}
-                  initialMode={authModalMode}
-                />
+              {adminSyncBusy ? (
+                <div className="py-6 flex flex-col items-center justify-center space-y-3">
+                  <div className="w-7 h-7 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-[11px] font-mono text-slate-400">
+                    Establishing live ledger link...
+                  </span>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {errorMessage && (
+                    <div className="p-3 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-xs flex items-start space-x-2">
+                      <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                      <span>{errorMessage}</span>
+                    </div>
+                  )}
+                  {successMessage && (
+                    <div className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 text-xs">
+                      {successMessage}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={loading}
+                    onClick={async () => {
+                      const ok = await signInAdminWithGoogle();
+                      if (ok) setCurrentTab('admin');
+                    }}
+                    className="w-full h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center space-x-2"
+                  >
+                    {loading ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <ShieldCheck size={16} />
+                        <span>One-Click Owner Sign-In</span>
+                      </>
+                    )}
+                  </button>
+
+                  {adminSyncNeeded && (
+                    <form
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!syncPassword) return;
+                        const ok = await signInWithEmail(adminAuthEmail, syncPassword);
+                        if (ok) {
+                          setSyncPassword('');
+                          setAdminSyncNeeded(false);
+                          setCurrentTab('admin');
+                        }
+                      }}
+                      className="pt-4 border-t border-white/10 space-y-3"
+                    >
+                      <label
+                        htmlFor="owner-sync-password"
+                        className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block"
+                      >
+                        Or Enter Existing Owner Account Password
+                      </label>
+                      <div className="relative">
+                        <KeyRound size={15} className="absolute left-3.5 top-3.5 text-slate-500" />
+                        <input
+                          id="owner-sync-password"
+                          type={showSyncPassword ? 'text' : 'password'}
+                          required
+                          autoComplete="current-password"
+                          value={syncPassword}
+                          onChange={(e) => setSyncPassword(e.target.value)}
+                          placeholder="Existing account password"
+                          className="w-full h-11 pl-10 pr-11 rounded-xl border border-white/10 bg-slate-950 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSyncPassword(!showSyncPassword)}
+                          aria-label="Toggle password visibility"
+                          className="absolute right-3.5 top-3 text-slate-500 hover:text-slate-300 cursor-pointer"
+                        >
+                          {showSyncPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="submit"
+                          disabled={loading}
+                          className="flex-1 h-10 rounded-xl bg-white/10 hover:bg-white/15 text-white font-semibold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          Unlock With Password
+                        </button>
+                        <button
+                          type="button"
+                          disabled={loading}
+                          onClick={() => sendPasswordReset(adminAuthEmail)}
+                          className="px-3 h-10 rounded-xl border border-white/10 hover:bg-white/5 text-slate-300 text-xs font-medium cursor-pointer disabled:opacity-50"
+                        >
+                          Reset Password
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={exitAdminRouteToSite}
+                    className="w-full inline-flex items-center justify-center space-x-1.5 text-xs text-slate-400 hover:text-white pt-2 cursor-pointer"
+                  >
+                    <ArrowLeft size={14} />
+                    <span>Lock Console & Return to Website</span>
+                  </button>
+                </div>
               )}
-            </AnimatePresence>
+            </div>
           </div>
         ) : !user ? (
           // PUBLIC FACING SITE
@@ -522,7 +706,11 @@ export default function App() {
           >
             {/* DESKTOP SIDEBAR */}
             <div className={isPWA ? 'hidden' : 'hidden md:block'}>
-              <Sidebar currentTab={currentTab} onChangeTab={handleChangeTab} />
+              <Sidebar
+                currentTab={currentTab}
+                onChangeTab={handleChangeTab}
+                onLogOut={handleSecureLogOut}
+              />
             </div>
 
             {/* MAIN PAGE BODY */}

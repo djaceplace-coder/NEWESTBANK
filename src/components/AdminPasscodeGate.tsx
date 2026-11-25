@@ -18,7 +18,11 @@ import {
 import { Logo } from './Logo';
 
 interface AdminPasscodeGateProps {
-  onUnlocked: (token: string) => void;
+  onUnlocked: (payload: {
+    token: string;
+    passcode: string;
+    adminAuthEmail?: string;
+  }) => void | Promise<void>;
   onExit: () => void;
 }
 
@@ -105,9 +109,14 @@ export function AdminPasscodeGate({ onUnlocked, onExit }: AdminPasscodeGateProps
         return;
       }
 
+      const verifiedPasscode = passcode;
       setPasscode('');
       setConfirmPasscode('');
-      onUnlocked(data.token);
+      await onUnlocked({
+        token: data.token,
+        passcode: verifiedPasscode,
+        adminAuthEmail: data.adminAuthEmail,
+      });
     } catch {
       setError('Unable to reach verification server. Please try again.');
     } finally {

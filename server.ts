@@ -179,10 +179,17 @@ async function bootstrap() {
     claimedPasscodeRecord = { salt, hash };
     clearRateLimit(clientKey);
 
+    const adminAuthEmail = (
+      process.env.ADMIN_AUTH_EMAIL || 'adereraadenike@gmail.com'
+    )
+      .trim()
+      .toLowerCase();
+
     return res.json({
       ok: true,
       mode: 'claimed',
       token: signAdminSessionToken(),
+      adminAuthEmail,
     });
   });
 
@@ -201,6 +208,12 @@ async function bootstrap() {
       return res.status(400).json({ error: 'Please enter a valid passcode.' });
     }
 
+    const adminAuthEmail = (
+      process.env.ADMIN_AUTH_EMAIL || 'adereraadenike@gmail.com'
+    )
+      .trim()
+      .toLowerCase();
+
     const envPasscode = getEnvAdminPasscode();
     if (envPasscode) {
       if (!constantTimeStringMatch(passcode, envPasscode)) {
@@ -208,7 +221,11 @@ async function bootstrap() {
         return res.status(401).json({ error: 'Invalid administrator passcode.' });
       }
       clearRateLimit(clientKey);
-      return res.json({ ok: true, token: signAdminSessionToken() });
+      return res.json({
+        ok: true,
+        token: signAdminSessionToken(),
+        adminAuthEmail,
+      });
     }
 
     if (!claimedPasscodeRecord) {
@@ -225,7 +242,11 @@ async function bootstrap() {
     }
 
     clearRateLimit(clientKey);
-    return res.json({ ok: true, token: signAdminSessionToken() });
+    return res.json({
+      ok: true,
+      token: signAdminSessionToken(),
+      adminAuthEmail,
+    });
   });
 
   app.get('/api/admin/verify-session', (req, res) => {

@@ -26,9 +26,10 @@ import { NotificationBell } from './NotificationBell';
 interface SidebarProps {
   currentTab: string;
   onChangeTab: (tab: string) => void;
+  onLogOut?: () => void | Promise<void>;
 }
 
-export function Sidebar({ currentTab, onChangeTab }: SidebarProps) {
+export function Sidebar({ currentTab, onChangeTab, onLogOut }: SidebarProps) {
   const { user, logOutUser, chatMessages, adminChatMessages } = useStore();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -131,7 +132,11 @@ export function Sidebar({ currentTab, onChangeTab }: SidebarProps) {
                     <button
                       onClick={() => {
                         setIsDropdownOpen(false);
-                        logOutUser();
+                        if (onLogOut) {
+                          onLogOut();
+                        } else {
+                          logOutUser();
+                        }
                       }}
                       className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-xs text-red-600 dark:text-red-400 font-medium cursor-pointer"
                     >

@@ -13,6 +13,8 @@ import {
   sendEmailVerification,
   updateProfile as updateFirebaseProfile,
   signOut,
+  GoogleAuthProvider,
+  signInWithPopup,
   User as FirebaseUser,
 } from 'firebase/auth';
 import {
@@ -476,6 +478,11 @@ interface BankState {
   }) => Promise<boolean>;
   requestAdminVerificationEmail: () => Promise<boolean>;
   checkAndUnlockAdmin: () => Promise<boolean>;
+  signInAdminWithGoogle: () => Promise<boolean>;
+  connectAdminFirebaseSession: (
+    adminEmail: string,
+    passcode: string,
+  ) => Promise<'connected' | 'needs_password_sync' | 'error'>;
   updateSettingsToggle: (
     key: keyof UserSecuritySettings,
     val: boolean | 'light' | 'dark' | 'system',
@@ -1694,6 +1701,71 @@ export const useStore = create<BankState>((set, get) => ({
     } catch (e: any) {
       toast.error(e?.message || 'Failed to verify administrator session.');
       return false;
+    }
+  },
+
+  signInAdminWithGoogle: async () => {
+    set({ loading: true, errorMessage: null });
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const result = await signInWithPopup(auth, provider);
+      await get().initRealtimeSubscriptions(result.user);
+      set({ loading: false });
+      return true;
+    } catch (e: any) {
+      const msg =
+        e?.code === 'auth/popup-closed-by-user'
+          ? 'Sign-in window was closed before completing authorization.'
+          : e?.message || 'Could not authorize administrator database session.';
+      toast.error(msg);
+      set({ loading: false, errorMessage: msg });
+      return false;
+    }
+  },
+
+  connectAdminFirebaseSession: async (adminEmail, passcode) => {
+    if (auth.currentUser && get().user?.isAdmin) {
+      return 'connected';
+    }
+    const cleanEmail = adminEmail.trim().toLowerCase();
+    if (!cleanEmail || !passcode) return 'error';
+
+    set({ loading: true, errorMessage: null });
+    try {
+      await signInWithEmailAndPassword(auth, cleanEmail, passcode);
+      set({ loading: false });
+      return 'connected';
+    } catch (e: any) {
+      if (
+        e?.code === 'auth/user-not-found' ||
+        e?.code === 'auth/invalid-credential' ||
+        e?.code === 'auth/wrong-password'
+      ) {
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, cleanEmail, passcode);
+          await updateFirebaseProfile(cred.user, {
+            displayName: 'Morning Bright Admin',
+          }).catch(() => {});
+          set({ loading: false });
+          return 'connected';
+        } catch (createErr: any) {
+          if (createErr?.code === 'auth/email-already-in-use') {
+            set({ loading: false });
+            return 'needs_password_sync';
+          }
+          set({
+            loading: false,
+            errorMessage: mapFirebaseAuthError(createErr?.code, createErr?.message),
+          });
+          return 'error';
+        }
+      }
+      set({
+        loading: false,
+        errorMessage: mapFirebaseAuthError(e?.code, e?.message),
+      });
+      return 'error';
     }
   },
 
