@@ -1,0 +1,826 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // GLOBAL PRIMITIVES & IDENTITY HELPERS
+    // =========================================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isBootstrappedAdmin() {
+      return isEmailVerified() && (
+        request.auth.token.email == 'adereraadenike@gmail.com' ||
+        request.auth.token.email == 'support@morningbrightfinance.com'
+      );
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        isBootstrappedAdmin() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isNonEmptyString(val, maxLen) {
+      return val is string && val.size() >= 1 && val.size() <= maxLen;
+    }
+
+    function isOptionalString(data, field, maxLen) {
+      return !(field in data) || data[field] == null || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isValidCurrency(val) {
+      return val is string && val in ['USD', 'EUR', 'GBP'];
+    }
+
+    function isValidTheme(val) {
+      return val is string && val in ['light', 'dark', 'system'];
+    }
+
+    function isValidTransactionType(val) {
+      return val is string && val in ['deposit', 'withdrawal', 'transfer_sent', 'transfer_received', 'card_spend'];
+    }
+
+    function isValidTransactionStatus(val) {
+      return val is string && val in ['completed', 'pending', 'failed'];
+    }
+
+    function isValidCardType(val) {
+      return val is string && val in ['platinum', 'ebony', 'emerald', 'physical'];
+    }
+
+    function isValidNotificationType(val) {
+      return val is string && val in ['info', 'alert', 'success', 'system'];
+    }
+
+    function isValidTicketStatus(val) {
+      return val is string && val in ['open', 'in_progress', 'resolved'];
+    }
+
+    function isValidLoanType(val) {
+      return val is string && val in ['personal', 'auto', 'mortgage', 'business'];
+    }
+
+    function isValidLoanStatus(val) {
+      return val is string && val in ['pending', 'approved', 'declined'];
+    }
+
+    function isValidInvestmentCategory(val) {
+      return val is string && val in ['index_etf', 'treasury', 'growth_tech', 'dividend'];
+    }
+
+    function isValidInvestmentStatus(val) {
+      return val is string && val in ['active', 'redemption_requested', 'redeemed'];
+    }
+
+    function isValidChatSenderRole(val) {
+      return val is string && val in ['client', 'admin'];
+    }
+
+    // =========================================================================
+    // ENTITY VALIDATION BLUEPRINTS (Anti-Update-Gap)
+    // =========================================================================
+
+    function isValidAdminRegistry(data, docId) {
+      return data.keys().hasAll(['uid', 'email', 'grantedBy', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'grantedBy', 'createdAt']) &&
+        isValidId(data.uid) &&
+        data.uid == docId &&
+        isNonEmptyString(data.email, 254) &&
+        isNonEmptyString(data.grantedBy, 128) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidUserProfile(data, docId) {
+      return data.keys().hasAll([
+          'uid', 'firstName', 'lastName', 'email', 'accountNumber', 'routingNumber',
+          'isVerified', 'isAdmin', 'isFrozen', 'isSuspended', 'biometricsEnabled',
+          'currency', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'firstName', 'lastName', 'email', 'accountNumber', 'routingNumber',
+          'pinCode', 'isVerified', 'isAdmin', 'isFrozen', 'isSuspended',
+          'biometricsEnabled', 'currency', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.uid == docId &&
+        isNonEmptyString(data.firstName, 80) &&
+        isNonEmptyString(data.lastName, 80) &&
+        isNonEmptyString(data.email, 254) &&
+        isNonEmptyString(data.accountNumber, 20) &&
+        data.accountNumber.matches('^[0-9]{8,20}$') &&
+        isNonEmptyString(data.routingNumber, 9) &&
+        data.routingNumber.matches('^[0-9]{9}$') &&
+        (!('pinCode' in data) || data.pinCode == null || (data.pinCode is string && data.pinCode.size() == 4 && data.pinCode.matches('^[0-9]{4}$'))) &&
+        data.isVerified is bool &&
+        data.isAdmin is bool &&
+        data.isFrozen is bool &&
+        data.isSuspended is bool &&
+        data.biometricsEnabled is bool &&
+        isValidCurrency(data.currency) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidBalance(data, docId) {
+      return data.keys().hasAll(['uid', 'checking', 'savings', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'checking', 'savings', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.uid == docId &&
+        data.checking is number && data.checking >= 0 && data.checking <= 1000000000 &&
+        data.savings is number && data.savings >= 0 && data.savings <= 1000000000 &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTransaction(data, docId) {
+      return data.keys().hasAll(['id', 'userId', 'amount', 'type', 'category', 'merchant', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'userId', 'amount', 'type', 'category', 'merchant', 'recipientEmail', 'senderEmail', 'status', 'createdAt']) &&
+        isValidId(data.id) &&
+        data.id == docId &&
+        isValidId(data.userId) &&
+        data.amount is number && data.amount > 0 && data.amount <= 100000000 &&
+        isValidTransactionType(data.type) &&
+        isNonEmptyString(data.category, 80) &&
+        isNonEmptyString(data.merchant, 160) &&
+        isOptionalString(data, 'recipientEmail', 254) &&
+        isOptionalString(data, 'senderEmail', 254) &&
+        isValidTransactionStatus(data.status) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidCard(data, docId) {
+      return data.keys().hasAll([
+          'id', 'userId', 'cardholderName', 'cardNumber', 'expiryDate', 'cvv',
+          'isFrozen', 'spendingLimit', 'spentThisMonth', 'cardType', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'cardholderName', 'cardNumber', 'expiryDate', 'cvv',
+          'isFrozen', 'spendingLimit', 'spentThisMonth', 'cardType', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.id == docId &&
+        isValidId(data.userId) &&
+        isNonEmptyString(data.cardholderName, 100) &&
+        data.cardNumber is string && data.cardNumber.size() >= 16 && data.cardNumber.size() <= 24 &&
+        data.expiryDate is string && data.expiryDate.size() == 5 && data.expiryDate.matches('^(0[1-9]|1[0-2])/[0-9]{2}$') &&
+        data.cvv is string && data.cvv.size() >= 3 && data.cvv.size() <= 4 && data.cvv.matches('^[0-9]{3,4}$') &&
+        data.isFrozen is bool &&
+        data.spendingLimit is number && data.spendingLimit >= 100 && data.spendingLimit <= 1000000 &&
+        data.spentThisMonth is number && data.spentThisMonth >= 0 && data.spentThisMonth <= 1000000 &&
+        isValidCardType(data.cardType) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSavingsGoal(data, docId) {
+      return data.keys().hasAll([
+          'id', 'userId', 'title', 'targetAmount', 'currentAmount',
+          'autoSaveEnabled', 'autoSavePercentage', 'color', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'title', 'targetAmount', 'currentAmount',
+          'autoSaveEnabled', 'autoSavePercentage', 'color', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.id == docId &&
+        isValidId(data.userId) &&
+        isNonEmptyString(data.title, 100) &&
+        data.targetAmount is number && data.targetAmount > 0 && data.targetAmount <= 100000000 &&
+        data.currentAmount is number && data.currentAmount >= 0 && data.currentAmount <= 100000000 &&
+        data.autoSaveEnabled is bool &&
+        data.autoSavePercentage is number && data.autoSavePercentage >= 0 && data.autoSavePercentage <= 100 &&
+        isNonEmptyString(data.color, 32) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data, docId) {
+      return data.keys().hasAll(['id', 'userId', 'title', 'message', 'isRead', 'type', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'userId', 'title', 'message', 'isRead', 'type', 'createdAt']) &&
+        isValidId(data.id) &&
+        data.id == docId &&
+        isValidId(data.userId) &&
+        isNonEmptyString(data.title, 140) &&
+        isNonEmptyString(data.message, 1000) &&
+        data.isRead is bool &&
+        isValidNotificationType(data.type) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidSettings(data, docId) {
+      return data.keys().hasAll([
+          'uid', 'faceIdEnabled', 'webAuthnConfigured', 'pushNotifications',
+          'emailStatements', 'twoFactorEnabled', 'theme', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid', 'faceIdEnabled', 'webAuthnConfigured', 'pushNotifications',
+          'emailStatements', 'twoFactorEnabled', 'theme', 'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.uid == docId &&
+        data.faceIdEnabled is bool &&
+        data.webAuthnConfigured is bool &&
+        data.pushNotifications is bool &&
+        data.emailStatements is bool &&
+        data.twoFactorEnabled is bool &&
+        isValidTheme(data.theme) &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSupportTicket(data, docId) {
+      return data.keys().hasAll(['id', 'userId', 'subject', 'description', 'status', 'category', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['id', 'userId', 'subject', 'description', 'status', 'category', 'documentBase64', 'createdAt', 'updatedAt']) &&
+        isValidId(data.id) &&
+        data.id == docId &&
+        isValidId(data.userId) &&
+        isNonEmptyString(data.subject, 160) &&
+        isNonEmptyString(data.description, 4000) &&
+        isValidTicketStatus(data.status) &&
+        isNonEmptyString(data.category, 64) &&
+        isOptionalString(data, 'documentBase64', 900000) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidBeneficiary(data, docId) {
+      return data.keys().hasAll(['id', 'userId', 'name', 'email', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'userId', 'name', 'email', 'createdAt']) &&
+        isValidId(data.id) &&
+        data.id == docId &&
+        isValidId(data.userId) &&
+        isNonEmptyString(data.name, 120) &&
+        isNonEmptyString(data.email, 254) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidLoanApplication(data, docId) {
+      return data.keys().hasAll([
+          'id', 'userId', 'loanType', 'amount', 'termMonths', 'apr',
+          'monthlyPayment', 'purpose', 'annualIncome', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'loanType', 'amount', 'termMonths', 'apr',
+          'monthlyPayment', 'purpose', 'annualIncome', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.id == docId &&
+        isValidId(data.userId) &&
+        isValidLoanType(data.loanType) &&
+        data.amount is number && data.amount >= 500 && data.amount <= 5000000 &&
+        data.termMonths is number && data.termMonths >= 6 && data.termMonths <= 360 &&
+        data.apr is number && data.apr >= 0 && data.apr <= 50 &&
+        data.monthlyPayment is number && data.monthlyPayment > 0 && data.monthlyPayment <= 1000000 &&
+        isNonEmptyString(data.purpose, 300) &&
+        data.annualIncome is number && data.annualIncome >= 0 && data.annualIncome <= 1000000000 &&
+        isValidLoanStatus(data.status) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidInvestmentPosition(data, docId) {
+      return data.keys().hasAll([
+          'id', 'userId', 'symbol', 'name', 'category', 'investedAmount',
+          'expectedYield', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'symbol', 'name', 'category', 'investedAmount',
+          'expectedYield', 'status', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.id == docId &&
+        isValidId(data.userId) &&
+        isNonEmptyString(data.symbol, 16) &&
+        isNonEmptyString(data.name, 120) &&
+        isValidInvestmentCategory(data.category) &&
+        data.investedAmount is number && data.investedAmount > 0 && data.investedAmount <= 100000000 &&
+        data.expectedYield is number && data.expectedYield >= 0 && data.expectedYield <= 100 &&
+        isValidInvestmentStatus(data.status) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminLog(data, docId) {
+      return data.keys().hasAll(['id', 'adminId', 'adminEmail', 'action', 'targetUserId', 'details', 'timestamp']) &&
+        data.keys().hasOnly(['id', 'adminId', 'adminEmail', 'action', 'targetUserId', 'details', 'timestamp']) &&
+        isValidId(data.id) &&
+        data.id == docId &&
+        isValidId(data.adminId) &&
+        isNonEmptyString(data.adminEmail, 254) &&
+        isNonEmptyString(data.action, 80) &&
+        isNonEmptyString(data.targetUserId, 128) &&
+        isNonEmptyString(data.details, 1000) &&
+        data.timestamp is timestamp;
+    }
+
+    function isValidChatMessage(data, docId) {
+      return data.keys().hasAll([
+          'id', 'userId', 'senderUid', 'senderRole', 'senderName',
+          'text', 'isReadByAdmin', 'isReadByClient', 'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'id', 'userId', 'senderUid', 'senderRole', 'senderName',
+          'text', 'isReadByAdmin', 'isReadByClient', 'createdAt'
+        ]) &&
+        isValidId(data.id) &&
+        data.id == docId &&
+        isValidId(data.userId) &&
+        isValidId(data.senderUid) &&
+        isValidChatSenderRole(data.senderRole) &&
+        isNonEmptyString(data.senderName, 120) &&
+        isNonEmptyString(data.text, 2000) &&
+        data.isReadByAdmin is bool &&
+        data.isReadByClient is bool &&
+        data.createdAt is timestamp;
+    }
+
+    // =========================================================================
+    // COLLECTION RULES
+    // =========================================================================
+
+    // 1. /admins/{adminUid} - Authoritative Admin Registry
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && isValidId(adminUid) && (isOwner(adminUid) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && isValidId(adminUid) && isValidAdminRegistry(incoming(), adminUid) &&
+        incoming().createdAt == request.time && isAdmin();
+      allow update: if false;
+      allow delete: if isSignedIn() && isValidId(adminUid) && isAdmin() && adminUid != request.auth.uid;
+    }
+
+    // 2. /users/{userId} - Private User Profiles (PII isolated to owner or admin)
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn() && isValidId(userId) && isValidUserProfile(incoming(), userId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isOwner(userId) &&
+            incoming().email == request.auth.token.email &&
+            incoming().isVerified == false &&
+            incoming().isFrozen == false &&
+            incoming().isSuspended == false &&
+            (incoming().isAdmin == false || isBootstrappedAdmin())
+          ) || isAdmin()
+        );
+
+      allow update: if isSignedIn() && isValidId(userId) && isValidUserProfile(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().email == existing().email &&
+        incoming().accountNumber == existing().accountNumber &&
+        incoming().routingNumber == existing().routingNumber &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            existing().isSuspended == false &&
+            (
+              // Action: Update Name
+              incoming().diff(existing()).affectedKeys().hasOnly(['firstName', 'lastName', 'updatedAt']) ||
+              // Action: Update Currency
+              incoming().diff(existing()).affectedKeys().hasOnly(['currency', 'updatedAt']) ||
+              // Action: Update Transfer PIN
+              incoming().diff(existing()).affectedKeys().hasOnly(['pinCode', 'updatedAt']) ||
+              // Action: Toggle Biometrics
+              incoming().diff(existing()).affectedKeys().hasOnly(['biometricsEnabled', 'updatedAt'])
+            )
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(userId) && isAdmin();
+    }
+
+    // 3. /balances/{userId} - Financial Account Balances
+    match /balances/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn() && isValidId(userId) && isValidBalance(incoming(), userId) &&
+        incoming().updatedAt == request.time &&
+        (
+          (
+            isOwner(userId) &&
+            incoming().checking == 0 &&
+            incoming().savings == 0
+          ) || isAdmin()
+        );
+
+      allow update: if isSignedIn() && isValidId(userId) && isValidBalance(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            get(/databases/$(database)/documents/users/$(userId)).data.isFrozen == false &&
+            get(/databases/$(database)/documents/users/$(userId)).data.isSuspended == false &&
+            (
+              // Action: Outbound spend / transfer / card fee / investment allocation (checking decreases, savings unchanged)
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly(['checking', 'updatedAt']) &&
+                incoming().checking < existing().checking &&
+                incoming().savings == existing().savings
+              ) ||
+              // Action: Reallocate checking to savings goal (net total conserved within floating-point epsilon)
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly(['checking', 'savings', 'updatedAt']) &&
+                incoming().checking < existing().checking &&
+                incoming().savings > existing().savings &&
+                (incoming().checking + incoming().savings) <= (existing().checking + existing().savings) + 0.001 &&
+                (incoming().checking + incoming().savings) >= (existing().checking + existing().savings) - 0.001
+              )
+            )
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // 4. /transactions/{transactionId} - Immutable Transaction Ledger
+    match /transactions/{transactionId} {
+      allow get: if isSignedIn() && isValidId(transactionId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() && isValidId(transactionId) && isValidTransaction(incoming(), transactionId) &&
+        incoming().createdAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            incoming().userId == request.auth.uid &&
+            incoming().type in ['withdrawal', 'transfer_sent', 'card_spend'] &&
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isFrozen == false &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuspended == false
+          )
+        );
+
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // 5. /cards/{cardId} - Virtual & Physical Cards
+    match /cards/{cardId} {
+      allow get: if isSignedIn() && isValidId(cardId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() && isValidId(cardId) && isValidCard(incoming(), cardId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            incoming().userId == request.auth.uid &&
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuspended == false
+          )
+        );
+
+      allow update: if isSignedIn() && isValidId(cardId) && isValidCard(incoming(), cardId) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().cardNumber == existing().cardNumber &&
+        incoming().expiryDate == existing().expiryDate &&
+        incoming().cvv == existing().cvv &&
+        incoming().cardType == existing().cardType &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            existing().userId == request.auth.uid &&
+            (
+              // Action: Toggle freeze state
+              incoming().diff(existing()).affectedKeys().hasOnly(['isFrozen', 'updatedAt']) ||
+              // Action: Adjust monthly spending limit
+              incoming().diff(existing()).affectedKeys().hasOnly(['spendingLimit', 'updatedAt'])
+            )
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(cardId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // 6. /savings_goals/{goalId} - Savings Goals
+    match /savings_goals/{goalId} {
+      allow get: if isSignedIn() && isValidId(goalId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() && isValidId(goalId) && isValidSavingsGoal(incoming(), goalId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            incoming().userId == request.auth.uid &&
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          )
+        );
+
+      allow update: if isSignedIn() && isValidId(goalId) && isValidSavingsGoal(incoming(), goalId) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            existing().userId == request.auth.uid &&
+            (
+              // Action: Contribute allocation to goal
+              incoming().diff(existing()).affectedKeys().hasOnly(['currentAmount', 'updatedAt']) ||
+              // Action: Update auto-save preference
+              incoming().diff(existing()).affectedKeys().hasOnly(['autoSaveEnabled', 'autoSavePercentage', 'updatedAt'])
+            )
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(goalId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // 7. /notifications/{notificationId} - Per-User Notifications
+    match /notifications/{notificationId} {
+      allow get: if isSignedIn() && isValidId(notificationId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() && isValidId(notificationId) && isValidNotification(incoming(), notificationId) &&
+        incoming().createdAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            incoming().userId == request.auth.uid &&
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          )
+        );
+
+      allow update: if isSignedIn() && isValidId(notificationId) && isValidNotification(incoming(), notificationId) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isAdmin() ||
+          (
+            existing().userId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['isRead'])
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(notificationId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // 8. /settings/{userId} - Per-User Security & Theme Settings
+    match /settings/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+
+      allow create: if isSignedIn() && isValidId(userId) && isValidSettings(incoming(), userId) &&
+        incoming().updatedAt == request.time &&
+        (isOwner(userId) || isAdmin());
+
+      allow update: if isSignedIn() && isValidId(userId) && isValidSettings(incoming(), userId) &&
+        incoming().uid == existing().uid &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            isOwner(userId) &&
+            (
+              incoming().diff(existing()).affectedKeys().hasOnly(['faceIdEnabled', 'updatedAt']) ||
+              incoming().diff(existing()).affectedKeys().hasOnly(['webAuthnConfigured', 'updatedAt']) ||
+              incoming().diff(existing()).affectedKeys().hasOnly(['pushNotifications', 'updatedAt']) ||
+              incoming().diff(existing()).affectedKeys().hasOnly(['emailStatements', 'updatedAt']) ||
+              incoming().diff(existing()).affectedKeys().hasOnly(['twoFactorEnabled', 'updatedAt']) ||
+              incoming().diff(existing()).affectedKeys().hasOnly(['theme', 'updatedAt'])
+            )
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(userId) && isAdmin();
+    }
+
+    // 9. /support_tickets/{ticketId} - Support & KYC Verification Tickets
+    match /support_tickets/{ticketId} {
+      allow get: if isSignedIn() && isValidId(ticketId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() && isValidId(ticketId) && isValidSupportTicket(incoming(), ticketId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        incoming().status == 'open' &&
+        (
+          isAdmin() ||
+          (
+            incoming().userId == request.auth.uid &&
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          )
+        );
+
+      allow update: if isSignedIn() && isValidId(ticketId) && isValidSupportTicket(incoming(), ticketId) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (existing().status != 'resolved' || isAdmin()) &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(ticketId) && isAdmin();
+    }
+
+    // 10. /beneficiaries/{beneficiaryId} - Saved Wire Transfer Beneficiaries
+    match /beneficiaries/{beneficiaryId} {
+      allow get: if isSignedIn() && isValidId(beneficiaryId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() && isValidId(beneficiaryId) && isValidBeneficiary(incoming(), beneficiaryId) &&
+        incoming().createdAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            incoming().userId == request.auth.uid &&
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          )
+        );
+
+      allow update: if isSignedIn() && isValidId(beneficiaryId) && isValidBeneficiary(incoming(), beneficiaryId) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isAdmin() ||
+          (
+            existing().userId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email'])
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(beneficiaryId) && (existing().userId == request.auth.uid || isAdmin());
+    }
+
+    // 11. /loan_applications/{loanId} - Client Loan & Mortgage Applications
+    match /loan_applications/{loanId} {
+      allow get: if isSignedIn() && isValidId(loanId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() && isValidId(loanId) && isValidLoanApplication(incoming(), loanId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        incoming().status == 'pending' &&
+        (
+          isAdmin() ||
+          (
+            incoming().userId == request.auth.uid &&
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuspended == false
+          )
+        );
+
+      allow update: if isSignedIn() && isValidId(loanId) && isValidLoanApplication(incoming(), loanId) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (existing().status == 'pending' || isAdmin()) &&
+        isAdmin() &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(loanId) && isAdmin();
+    }
+
+    // 12. /investments/{investmentId} - Client Investment Positions (Atomically Debited from Checking)
+    match /investments/{investmentId} {
+      allow get: if isSignedIn() && isValidId(investmentId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() && isValidId(investmentId) && isValidInvestmentPosition(incoming(), investmentId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        incoming().status == 'active' &&
+        (
+          isAdmin() ||
+          (
+            incoming().userId == request.auth.uid &&
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isFrozen == false &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isSuspended == false &&
+            getAfter(/databases/$(database)/documents/balances/$(request.auth.uid)).data.checking <=
+              get(/databases/$(database)/documents/balances/$(request.auth.uid)).data.checking - incoming().investedAmount + 0.001
+          )
+        );
+
+      allow update: if isSignedIn() && isValidId(investmentId) && isValidInvestmentPosition(incoming(), investmentId) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().symbol == existing().symbol &&
+        incoming().name == existing().name &&
+        incoming().category == existing().category &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isAdmin() ||
+          (
+            existing().userId == request.auth.uid &&
+            existing().status == 'active' &&
+            incoming().status == 'redemption_requested' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(investmentId) && isAdmin();
+    }
+
+    // 13. /admin_logs/{logId} - Immutable Administrative Audit Trail
+    match /admin_logs/{logId} {
+      allow get: if isValidId(logId) && isAdmin();
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn() && isValidId(logId) && isValidAdminLog(incoming(), logId) &&
+        incoming().adminId == request.auth.uid &&
+        incoming().timestamp == request.time &&
+        isAdmin();
+
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // 14. /chat_messages/{messageId} - Real-Time Client <-> Management Chat
+    match /chat_messages/{messageId} {
+      allow get: if isSignedIn() && isValidId(messageId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() && isValidId(messageId) && isValidChatMessage(incoming(), messageId) &&
+        incoming().createdAt == request.time &&
+        incoming().senderUid == request.auth.uid &&
+        (
+          (
+            incoming().senderRole == 'client' &&
+            incoming().userId == request.auth.uid &&
+            incoming().isReadByClient == true &&
+            incoming().isReadByAdmin == false &&
+            exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          ) ||
+          (
+            isAdmin() &&
+            incoming().senderRole == 'admin' &&
+            incoming().isReadByAdmin == true &&
+            exists(/databases/$(database)/documents/users/$(incoming().userId))
+          )
+        );
+
+      allow update: if isSignedIn() && isValidId(messageId) && isValidChatMessage(incoming(), messageId) &&
+        incoming().id == existing().id &&
+        incoming().userId == existing().userId &&
+        incoming().senderUid == existing().senderUid &&
+        incoming().senderRole == existing().senderRole &&
+        incoming().senderName == existing().senderName &&
+        incoming().text == existing().text &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          (
+            existing().userId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['isReadByClient']) &&
+            incoming().isReadByClient == true
+          ) ||
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['isReadByAdmin']) &&
+            incoming().isReadByAdmin == true
+          )
+        );
+
+      allow delete: if isSignedIn() && isValidId(messageId) && isAdmin();
+    }
+  }
+}

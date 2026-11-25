@@ -1,0 +1,8 @@
+{
+  "name": "Remix bank setup",
+  "description": "Premium modern digital banking PWA with responsive dashboards, real-time transaction history, virtual cards, goal savings, on-demand in-site KYC verification, and custom administrator controls.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
